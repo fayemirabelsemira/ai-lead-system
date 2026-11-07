@@ -1,0 +1,23 @@
+# Secrets: NEVER commit these
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+.wrangler/
+
+# n8n local data (can contain credentials)
+n8n/n8n_data/
+n8n/local-files/
+
+# Logs
+*.log
+npm-debug.log*
+
+# macOS
+.DS_Store
