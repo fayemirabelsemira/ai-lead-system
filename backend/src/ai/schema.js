@@ -16,7 +16,7 @@ export const INTENTS = [
   // Home services
   "SERVICE_REQUEST", "QUOTATION_REQUEST", "AVAILABILITY_INQUIRY",
   // General
-  "FOLLOW_UP", "COMPLAINT", "SPAM", "UNCLEAR", "GENERAL_INQUIRY",
+  "FOLLOW_UP", "COMPLAINT", "SPAM", "UNCLEAR", "OUT_OF_SCOPE", "GENERAL_INQUIRY",
 ];
 
 // JSON Schema sent to Groq. Strict mode needs every property listed in
