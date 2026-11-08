@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "node --env-file=../.env src/bot.js",
-    "send-card": "node --env-file=../.env scripts/send-card.js"
+    "send-card": "node --env-file=../.env scripts/send-card.js",
+    "test-safety": "node --test scripts/safety.test.js",
+    "test-ai": "node --env-file=../.env scripts/test-ai.js"
   },
   "engines": {
     "node": ">=22"
