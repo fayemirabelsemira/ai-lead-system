@@ -25,5 +25,17 @@ export const getUpdates = (offset, signal) =>
     signal
   );
 
+// Messages are sent as PLAIN TEXT (no parse_mode) on purpose:
+// customer-written text must never be able to inject formatting.
 export const sendMessage = (chatId, text, extra = {}) =>
   call("sendMessage", { chat_id: chatId, text, ...extra });
+
+export const editMessageText = (chatId, messageId, text, extra = {}) =>
+  call("editMessageText", { chat_id: chatId, message_id: messageId, text, ...extra });
+
+export const answerCallbackQuery = (callbackQueryId, text, showAlert = false) =>
+  call("answerCallbackQuery", {
+    callback_query_id: callbackQueryId,
+    text,
+    show_alert: showAlert,
+  });

@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --env-file=../.env src/bot.js"
+    "dev": "node --env-file=../.env src/bot.js",
+    "send-card": "node --env-file=../.env scripts/send-card.js"
   },
   "engines": {
     "node": ">=22"

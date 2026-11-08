@@ -1,5 +1,6 @@
-import { getUpdates, sendMessage } from "./telegram.js";
+import { getUpdates, sendMessage, answerCallbackQuery } from "./telegram.js";
 import { supabase } from "./supabase.js";
+import { handleCallback, handleEditReply } from "./approvals.js";
 
 // Authorization comes from the DATABASE, never from message text.
 // A Telegram user is authorized only if their ID is linked to a business
@@ -37,6 +38,12 @@ async function handleMessage(message) {
     return;
   }
 
+  // Replying to an approval card with plain text means "edit the reply".
+  if (message.reply_to_message && text && !text.startsWith("/")) {
+    await handleEditReply(message);
+    return;
+  }
+
   await sendMessage(chatId, "Available command: /whoami");
 }
 
@@ -49,6 +56,21 @@ process.on("SIGINT", () => {
   controller.abort();
 });
 
+async function handleUpdate(update) {
+  try {
+    if (update.message) await handleMessage(update.message);
+    if (update.callback_query) await handleCallback(update.callback_query);
+  } catch (err) {
+    console.error("Failed to handle an update:", err.message);
+    if (update.callback_query) {
+      // Stop the button's loading spinner even when something went wrong.
+      await answerCallbackQuery(update.callback_query.id, "Something went wrong. Please try again.").catch(
+        () => {}
+      );
+    }
+  }
+}
+
 async function poll() {
   console.log("Bot polling started. Press Ctrl+C to stop.");
   while (running) {
@@ -56,11 +78,7 @@ async function poll() {
       const updates = await getUpdates(offset, controller.signal);
       for (const update of updates) {
         offset = update.update_id + 1; // mark as handled
-        try {
-          if (update.message) await handleMessage(update.message);
-        } catch (err) {
-          console.error("Failed to handle an update:", err.message);
-        }
+        await handleUpdate(update);
       }
     } catch (err) {
       if (!running) break;
