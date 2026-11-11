@@ -16,6 +16,23 @@ async function findAuthorizedMemberships(telegramUserId) {
   return data ?? [];
 }
 
+const UNAUTHORIZED_NOTICE_MS = 10 * 60 * 1000;
+const MAX_TRACKED_STRANGERS = 5000;
+const lastUnauthorizedNotice = new Map();
+
+function shouldNotifyUnauthorized(telegramUserId) {
+  const now = Date.now();
+  const last = lastUnauthorizedNotice.get(telegramUserId);
+  if (last && now - last < UNAUTHORIZED_NOTICE_MS) return false;
+  // Keep memory bounded: drop the oldest entry (Maps keep insertion order).
+  if (lastUnauthorizedNotice.size >= MAX_TRACKED_STRANGERS) {
+    lastUnauthorizedNotice.delete(lastUnauthorizedNotice.keys().next().value);
+  }
+  lastUnauthorizedNotice.delete(telegramUserId);
+  lastUnauthorizedNotice.set(telegramUserId, now);
+  return true;
+}
+
 async function handleMessage(message) {
   // Private chats only for now; ignore groups and channels.
   if (message.chat.type !== "private" || !message.from) return;
@@ -27,8 +44,12 @@ async function handleMessage(message) {
   const memberships = await findAuthorizedMemberships(userId);
 
   if (memberships.length === 0) {
-    console.log(`Rejected message from unauthorized Telegram user ${userId}`);
-    await sendMessage(chatId, "Sorry, this account is not authorized to use this bot.");
+    // Answer a stranger at most once per window, so spamming the bot
+    // cannot make it send an unlimited number of replies.
+    if (shouldNotifyUnauthorized(userId)) {
+      console.log(`Rejected message from unauthorized Telegram user ${userId}`);
+      await sendMessage(chatId, "Sorry, this account is not authorized to use this bot.");
+    }
     return;
   }
 
@@ -51,10 +72,13 @@ let offset = 0;
 let running = true;
 const controller = new AbortController();
 
-process.on("SIGINT", () => {
+// SIGINT = Ctrl+C locally; SIGTERM = how hosting platforms and Docker stop a process.
+const stop = () => {
   running = false;
   controller.abort();
-});
+};
+process.on("SIGINT", stop);
+process.on("SIGTERM", stop);
 
 async function handleUpdate(update) {
   try {

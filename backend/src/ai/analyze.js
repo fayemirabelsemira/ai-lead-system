@@ -8,9 +8,15 @@ const MAX_TRIES = 2; // one retry when the AI returns something unusable
 // Reads one customer inquiry and returns either a validated analysis or a
 // FAILED result. It never throws and never returns unchecked AI output.
 export async function analyzeInquiry({ business, inquiry, maxLength = 2000 }) {
-  const text = inquiry.trim().slice(0, maxLength);
   const totals = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
   const started = Date.now();
+  if (typeof inquiry !== "string" || !inquiry.trim()) {
+    return failed("The inquiry is empty", totals, started, null);
+  }
+  if (!business || typeof business !== "object" || !business.business_name) {
+    return failed("Business information is missing", totals, started, null);
+  }
+  const text = inquiry.trim().slice(0, maxLength);
   let lastProblem = "no attempt made";
   let model = null;
 

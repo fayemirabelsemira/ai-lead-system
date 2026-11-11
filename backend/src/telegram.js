@@ -1,4 +1,5 @@
 import { config } from "./config.js";
+import { clip, TELEGRAM_MAX_TEXT } from "./text.js";
 
 const BASE = `https://api.telegram.org/bot${config.telegramBotToken}`;
 
@@ -27,11 +28,17 @@ export const getUpdates = (offset, signal) =>
 
 // Messages are sent as PLAIN TEXT (no parse_mode) on purpose:
 // customer-written text must never be able to inject formatting.
+// Text is capped at Telegram's limit so an oversized message never fails to send.
 export const sendMessage = (chatId, text, extra = {}) =>
-  call("sendMessage", { chat_id: chatId, text, ...extra });
+  call("sendMessage", { chat_id: chatId, text: clip(text, TELEGRAM_MAX_TEXT), ...extra });
 
 export const editMessageText = (chatId, messageId, text, extra = {}) =>
-  call("editMessageText", { chat_id: chatId, message_id: messageId, text, ...extra });
+  call("editMessageText", {
+    chat_id: chatId,
+    message_id: messageId,
+    text: clip(text, TELEGRAM_MAX_TEXT),
+    ...extra,
+  });
 
 export const answerCallbackQuery = (callbackQueryId, text, showAlert = false) =>
   call("answerCallbackQuery", {

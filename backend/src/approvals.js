@@ -1,6 +1,7 @@
 import { randomBytes, createHash } from "node:crypto";
 import { supabase } from "./supabase.js";
 import { sendMessage, editMessageText, answerCallbackQuery } from "./telegram.js";
+import { clip } from "./text.js";
 
 // Button data looks like "ap:<32 hex characters>" (Telegram allows 64 bytes).
 const CALLBACK_PATTERN = /^(ap|rj|ed|vw):([0-9a-f]{32})$/;
@@ -16,8 +17,6 @@ function unwrap({ data, error }, what) {
   if (error) throw new Error(`${what}: ${error.message}`);
   return data;
 }
-
-const clip = (text, max) => (text.length > max ? `${text.slice(0, max)}…` : text);
 
 async function loadLeadContext(leadId) {
   const lead = unwrap(
@@ -83,7 +82,9 @@ function cardText(lead, analysis, reply, version) {
     `"${reply}"`,
     "",
     "AI Reason:",
-    analysis.score_reason ?? "-",
+    // Clipped so the card always fits Telegram's 4096-character limit
+    // (the reply itself is never clipped: the owner must see all of it).
+    analysis.score_reason ? clip(analysis.score_reason, 500) : "-",
   ].join("\n");
 }
 
@@ -144,9 +145,18 @@ export async function sendLeadCard(leadId) {
     "Create draft"
   );
 
-  const sent = await sendMessage(chatId, cardText(lead, analysis, analysis.suggested_reply, 1), {
-    reply_markup: keyboard(token),
-  });
+  let sent;
+  try {
+    sent = await sendMessage(chatId, cardText(lead, analysis, analysis.suggested_reply, 1), {
+      reply_markup: keyboard(token),
+    });
+  } catch (err) {
+    // The card never arrived, so its token is lost. Cancel the draft so the
+    // lead is not stuck waiting for an approval nobody can give.
+    const { error } = await supabase.rpc("cancel_reply_draft", { p_approval_id: draft.approval_id });
+    if (error) console.error("Could not cancel the undelivered draft:", error.message);
+    throw err;
+  }
   unwrap(
     await supabase
       .from("message_approvals")
@@ -260,11 +270,12 @@ export async function handleCallback(cb) {
   }
 
   if (action === "ed") {
-    await answerCallbackQuery(cb.id, "Reply to the card with your new text.");
+    await answerCallbackQuery(cb.id, "Type your new reply.");
+    // force_reply makes Telegram open the reply box for this prompt automatically.
     await sendMessage(
       chatId,
-      "✏️ To edit: reply to the card above with your new message text. The edited version will need a new approval.",
-      { reply_to_message_id: cb.message.message_id }
+      `✏️ Reply to this message with your new reply text. The edited version will need a new approval.\n\nRef: ${approval.id}`,
+      { reply_markup: { force_reply: true, input_field_placeholder: "Type the new reply" } }
     );
     return;
   }
@@ -303,16 +314,18 @@ export async function handleEditReply(message) {
   const repliedTo = message.reply_to_message;
   const newText = (message.text ?? "").trim();
 
-  const approval = unwrap(
-    await supabase
-      .from("message_approvals")
-      .select("id, business_id, telegram_message_id")
-      .eq("telegram_chat_id", chatId)
-      .eq("telegram_message_id", repliedTo.message_id)
-      .eq("status", "PENDING")
-      .maybeSingle(),
-    "Find card"
-  );
+  // Two ways to point at an approval: reply to the edit prompt (it carries "Ref: <id>"),
+  // or reply directly to the card itself. "Ref:" is only trusted in the bot's own messages.
+  const ref = repliedTo.from?.is_bot
+    ? /Ref: ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/.exec(repliedTo.text ?? "")
+    : null;
+  let lookup = supabase
+    .from("message_approvals")
+    .select("id, business_id, telegram_message_id")
+    .eq("telegram_chat_id", chatId)
+    .eq("status", "PENDING");
+  lookup = ref ? lookup.eq("id", ref[1]) : lookup.eq("telegram_message_id", repliedTo.message_id);
+  const approval = unwrap(await lookup.maybeSingle(), "Find card");
   if (!approval) {
     await sendMessage(chatId, "That card is not waiting for approval anymore.");
     return;
@@ -355,7 +368,7 @@ export async function handleEditReply(message) {
     await editMessageText(
       chatId,
       approval.telegram_message_id,
-      `${repliedTo.text ?? ""}\n\n✏️ SUPERSEDED — this reply was edited. Use the newer card below.`,
+      "✏️ SUPERSEDED — this reply was edited. Use the newer card below.",
       NO_BUTTONS
     );
   } catch (err) {
