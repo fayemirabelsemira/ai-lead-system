@@ -26,6 +26,8 @@ export const config = {
   telegramBotToken: required("TELEGRAM_BOT_TOKEN"),
   isProduction: process.env.NODE_ENV === "production",
   port: Number(process.env.PORT) || 3000,
+  // "127.0.0.1" when a reverse proxy (Caddy) sits in front; empty = all interfaces.
+  host: optional("HOST") ?? undefined,
   // The address customers use to reach this server, e.g. https://leads.example.com
   // (used to print form links). Defaults to this computer.
   publicBaseUrl: (optional("PUBLIC_BASE_URL") ?? `http://localhost:${Number(process.env.PORT) || 3000}`).replace(/\/+$/, ""),

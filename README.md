@@ -22,7 +22,8 @@ dashboard, Resend (custom-domain email).
 - n8n/                automation engine setup (no credentials)
 - supabase/migrations/ SQL files, run manually in the Supabase SQL Editor
 - form/               the customer inquiry form page (served at /f/<form id>)
-- docs/               architecture and runbooks
+- deploy/             server setup (Oracle Cloud / any Ubuntu server)
+- docs/               architecture, deployment guide
 
 ## Setup
 1. Copy .env.example to .env
@@ -73,6 +74,9 @@ Every minute (and right after start) the backend checks for interrupted work:
 `npm run dev` prints every form link. Open it, send an inquiry, and it arrives
 in Telegram as a card. The form page shows a "Development server" note
 unless NODE_ENV=production.
+
+Putting it online on a free Oracle Cloud server: see docs/deploy-oracle.md
+(scripts in deploy/).
 
 In production, set the environment variables on the host (no .env file),
 set NODE_ENV=production and PUBLIC_BASE_URL (the address customers use),

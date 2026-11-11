@@ -1,0 +1,31 @@
+# systemd service: keeps the backend running on the server, restarts it if it
+# crashes, and starts it again after a reboot. Installed by deploy/setup.sh.
+#   status: sudo systemctl status ai-lead
+#   logs:   sudo journalctl -u ai-lead -f
+[Unit]
+Description=AI Lead System (Telegram bot, workers, form page)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ailead
+Group=ailead
+WorkingDirectory=/opt/ai-lead-system/backend
+ExecStart=/usr/bin/node --env-file=/etc/ai-lead/env src/index.js
+Restart=always
+RestartSec=5
+# The backend finishes the job in progress on SIGTERM before exiting.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Hardening: the app only needs to read its own files.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

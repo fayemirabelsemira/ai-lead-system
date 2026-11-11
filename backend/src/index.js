@@ -74,8 +74,8 @@ worker.start();
 recovery.start();
 if (outbox) outbox.start();
 else console.log("Automatic email is OFF (GMAIL_USER / GMAIL_APP_PASSWORD not set). Approved replies use copy-and-send.");
-server.listen(config.port, async () => {
-  console.log(`HTTP server listening on port ${config.port}.`);
+server.listen(config.port, config.host, async () => {
+  console.log(`HTTP server listening on ${config.host ?? "all interfaces"}, port ${config.port}.`);
   if (formHtml) await printFormLinks();
 });
 
