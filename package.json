@@ -1,0 +1,13 @@
+{
+  "name": "ai-lead-system-showcase",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Public portfolio demo (showcase/ + api/). The real system lives in backend/.",
+  "type": "module",
+  "scripts": {
+    "showcase": "node --env-file-if-exists=.env scripts/showcase-server.js"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

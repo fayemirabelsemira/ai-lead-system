@@ -24,6 +24,7 @@ Not built yet: follow-ups, Tally/generic webhooks, Resend (custom-domain email).
 - form/               the customer inquiry form page (served at /f/<form id>)
 - deploy/             server setup (Oracle Cloud / any Ubuntu server)
 - docs/               architecture, deployment guide
+- showcase/, api/     public portfolio demo (Vercel); see docs/portfolio-demo.md
 
 ## Setup
 1. Copy .env.example to .env
@@ -45,6 +46,11 @@ Not built yet: follow-ups, Tally/generic webhooks, Resend (custom-domain email).
     npm run email -- test <your-email>       # check Gmail settings
     npm run email -- on|off <business-uuid>  # automatic email per business
     npm run test-ai     # calls the real Groq API (uses tokens)
+
+## Portfolio demo
+A public, always-on demo page (live AI + clearly labeled simulated
+approval/sending), deployable free on Vercel. Locally: `npm run showcase`
+from the project root. Setup and embedding: docs/portfolio-demo.md.
 
 ## Adding your business
 1. `cp business.example.json business.json` (inside backend/; business.json
