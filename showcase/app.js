@@ -297,6 +297,21 @@ async function deliver(reply, sample, runId, edited) {
       el("span", { class: "ok-badge" }, "Replied"), el("span", { class: "small" }, "just now")));
 }
 
+// ---------- top bar: border once scrolled, current section highlighted ----------
+const bar = document.querySelector("header.top");
+const onScroll = () => bar.classList.toggle("scrolled", scrollY > 8);
+addEventListener("scroll", onScroll, { passive: true });
+onScroll();
+const navLinks = [...document.querySelectorAll("nav.links a")];
+const spy = new IntersectionObserver((entries) => {
+  for (const e of entries) {
+    if (!e.isIntersecting) continue;
+    for (const a of navLinks) a.setAttribute("aria-current", a.getAttribute("href") === `#${e.target.id}` ? "true" : "false");
+  }
+}, { rootMargin: "-45% 0px -50% 0px" });
+for (const a of navLinks) { const s = document.querySelector(a.getAttribute("href")); if (s) spy.observe(s); }
+if (!/Mac|iPhone|iPad/.test(navigator.platform)) for (const k of document.querySelectorAll("kbd")) if (k.textContent === "⌘") k.textContent = "Ctrl";
+
 // ---------- start ----------
 renderSample();
 resetRun();
