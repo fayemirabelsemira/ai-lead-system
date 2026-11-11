@@ -37,6 +37,7 @@ dashboard, Resend (custom-domain email).
     npm install
     npm test            # offline tests, no keys needed
     npm run dev         # bot + job worker + HTTP API, reads ../.env
+    npm run demo        # same, plus a free public HTTPS link (Cloudflare quick tunnel)
     npm run add-business -- business.json    # add/update a business + form link
     npm run add-business -- --show-ids       # Telegram ids already in the database
     npm run create-form -- <business-uuid>   # prints a business's form link
@@ -74,6 +75,13 @@ Every minute (and right after start) the backend checks for interrupted work:
 `npm run dev` prints every form link. Open it, send an inquiry, and it arrives
 in Telegram as a card. The form page shows a "Development server" note
 unless NODE_ENV=production.
+
+## Demo from your laptop (free, no account)
+`brew install cloudflared` once, then stop `npm run dev` and run `npm run demo`.
+It opens a Cloudflare quick tunnel, starts the backend with that address, and
+prints a public form link like https://random-words.trycloudflare.com/f/<id>
+that works on any phone. The link works only while `npm run demo` runs and
+changes every time it starts. Ctrl+C stops both.
 
 Putting it online on a free Oracle Cloud server: see docs/deploy-oracle.md
 (scripts in deploy/).
