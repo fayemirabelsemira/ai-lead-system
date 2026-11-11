@@ -1,7 +1,7 @@
 // HTTP API. No framework: node:http only.
 //   GET  /health                   for the host's health checks
 //   POST /intake/<form id>         website form submissions
-//   GET  /test-form                the development test form (when enabled)
+//   GET  /f/<form id>              the customer inquiry form page
 // The database call is passed in as `submit`, so this file has no I/O of its own.
 import { createServer as createHttpServer } from "node:http";
 import { validateSubmission } from "./intake/validate.js";
@@ -16,13 +16,31 @@ const BASE_HEADERS = {
   "Cache-Control": "no-store",
 };
 
-const TEST_FORM_CSP =
+const FORM_PAGE_CSP =
   // The two animation libraries are allowed by exact file only (and pinned with
   // integrity hashes in the page). The form works without them.
   "default-src 'none'; script-src 'unsafe-inline' " +
   "https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js " +
   "https://unpkg.com/lenis@1.1.13/dist/lenis.min.js; style-src 'unsafe-inline'; " +
   "connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'";
+
+const escapeHtml = (s) =>
+  String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+
+const NOT_FOUND_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Form not available</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;font:16px/1.5 system-ui,sans-serif;
+background:#f6f8fc;color:#0b1f3a;padding:16px}@media (prefers-color-scheme:dark){body{background:#060b16;color:#e8edf6}}
+p{color:#55627a}</style></head><body><main><h1>This form is not available</h1>
+<p>Please check the link, or contact the business directly.</p></main></body></html>`;
+
+// Fills in the page template. Every value is HTML-escaped.
+export function renderFormPage(template, { formId, businessName, devNote }) {
+  return template
+    .replaceAll("__FORM_ID__", escapeHtml(formId))
+    .replaceAll("__BUSINESS_NAME__", escapeHtml(businessName))
+    .replace("<!--DEV_NOTE-->", devNote ? '<p class="dev">Development server</p>' : "");
+}
 
 class HttpError extends Error {
   constructor(status, message) {
@@ -65,13 +83,47 @@ export function createServer({
   submit,
   allowedOrigins = [],
   trustProxy = false,
-  testFormHtml = null,
+  formHtml = null,
+  lookupForm = async () => null,
+  devNote = false,
   perMinute = 5,
   perHour = 30,
   log = console,
 }) {
   const minuteLimit = createRateLimiter({ limit: perMinute, windowMs: 60_000 });
   const hourLimit = createRateLimiter({ limit: perHour, windowMs: 3_600_000 });
+  // Page views are cheap but each one may read the database.
+  const pageLimit = createRateLimiter({ limit: 60, windowMs: 60_000 });
+  const formCache = new Map(); // formId -> { value, expires }
+  const FORM_CACHE_MS = 60_000;
+
+  async function cachedLookup(formId) {
+    const hit = formCache.get(formId);
+    if (hit && hit.expires > Date.now()) return hit.value;
+    const value = await lookupForm(formId);
+    if (formCache.size >= 1000) formCache.delete(formCache.keys().next().value);
+    formCache.set(formId, { value, expires: Date.now() + FORM_CACHE_MS });
+    return value;
+  }
+
+  const sendHtml = (res, status, html) => {
+    res.writeHead(status, {
+      ...BASE_HEADERS,
+      "Content-Type": "text/html; charset=utf-8",
+      "Content-Security-Policy": FORM_PAGE_CSP,
+      "X-Frame-Options": "DENY",
+    });
+    res.end(html);
+  };
+
+  async function handleFormPage(req, res, formId) {
+    if (!pageLimit(clientIp(req))) {
+      return send(res, 429, { ok: false, error: "Too many requests. Please try again later." }, { "Retry-After": "60" });
+    }
+    const form = FORM_ID.test(formId) ? await cachedLookup(formId) : null;
+    if (!form) return sendHtml(res, 404, NOT_FOUND_PAGE);
+    return sendHtml(res, 200, renderFormPage(formHtml, { formId, businessName: form.businessName, devNote }));
+  }
 
   const clientIp = (req) => {
     if (trustProxy) {
@@ -133,15 +185,8 @@ export function createServer({
 
       if (path === "/health" && req.method === "GET") return send(res, 200, { ok: true });
 
-      if (path === "/test-form" && req.method === "GET" && testFormHtml) {
-        res.writeHead(200, {
-          ...BASE_HEADERS,
-          "Content-Type": "text/html; charset=utf-8",
-          "Content-Security-Policy": TEST_FORM_CSP,
-          "X-Frame-Options": "DENY",
-        });
-        return res.end(testFormHtml);
-      }
+      const page = /^\/f\/([^/]+)$/.exec(path);
+      if (page && req.method === "GET" && formHtml) return await handleFormPage(req, res, page[1]);
 
       const match = /^\/intake\/([^/]+)$/.exec(path);
       if (match) {

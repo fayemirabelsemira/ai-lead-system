@@ -3,6 +3,10 @@
 .env.*
 !.env.example
 
+# Real business files (contain owner contact details)
+backend/business*.json
+!backend/business.example.json
+
 # Dependencies
 node_modules/
 

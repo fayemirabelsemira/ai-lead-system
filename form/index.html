@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>Send an Inquiry</title>
+<title>Contact __BUSINESS_NAME__</title>
 <script>
   // Hide animated elements until the animation starts, so they don't flash.
   // Skipped for "reduce motion"; a timer makes sure nothing stays hidden.
@@ -172,6 +172,14 @@
   .consent input:focus-visible { outline: none; box-shadow: 0 0 0 4px var(--accent-soft); }
   .consent:has(input:checked) { border-color: var(--accent); }
 
+  .privacy { margin-top: 14px; font-size: .85rem; color: var(--muted); }
+  .privacy summary {
+    cursor: pointer; width: fit-content; font-weight: 600; color: var(--accent);
+    border-radius: 6px; list-style-position: inside;
+  }
+  .privacy summary:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+  .privacy p { margin: 8px 0 0; }
+
   .error { color: var(--error); font-size: .84rem; margin-top: 6px; }
   .error:empty { display: none; }
   .trap { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
@@ -253,7 +261,7 @@
     <span class="blob b3" aria-hidden="true"></span>
     <span class="blob b4" aria-hidden="true"></span>
 
-    <span class="eyebrow" data-reveal><span class="pulse" aria-hidden="true"></span>We read every inquiry</span>
+    <span class="eyebrow" data-reveal><span class="pulse" aria-hidden="true"></span>__BUSINESS_NAME__</span>
     <h1 id="title">
       <span class="line" data-split>Tell us what you need.</span>
       <span class="line" data-split>We'll take it from here.</span>
@@ -277,7 +285,7 @@
   </section>
 
   <section class="card" id="card" aria-labelledby="form-title" data-reveal>
-    <form id="form" novalidate>
+    <form id="form" data-form-id="__FORM_ID__" novalidate>
       <h2 id="form-title">Send us an inquiry</h2>
       <p class="sub">It only takes a minute.</p>
 
@@ -321,6 +329,15 @@
       </label>
       <div class="error" id="err-consent" data-for="consent"></div>
 
+      <details class="privacy">
+        <summary>How we use your details</summary>
+        <p>We use your name, contact details and message only to reply to this inquiry.
+        To help us answer faster, an automated assistant reads your message and suggests a reply;
+        a person from our team checks every reply before it is sent. Your details are stored securely
+        with our service providers and are never sold. To have them corrected or deleted, just ask us
+        when we reply.</p>
+      </details>
+
       <button id="submit" class="btn" type="submit" data-reveal>
         <span class="spinner" aria-hidden="true"></span>
         <span id="submit-label">Send inquiry</span>
@@ -337,7 +354,7 @@
     </div>
   </section>
 </main>
-<p class="dev">Development test form</p>
+<!--DEV_NOTE-->
 
 <!-- Animation libraries. Pinned versions with integrity hashes; the form works without them. -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"
@@ -351,7 +368,12 @@
   // When hosting this page elsewhere, set the API's full address here.
   const API_BASE = "";
 
-  const formId = new URLSearchParams(location.search).get("form") ?? "";
+  // The server fills in the form id; "?form=" is a fallback for opening the file directly.
+  const FORM_ID_FORMAT = /^[A-Za-z0-9_-]{22,64}$/;
+  const formIdFromPage = document.getElementById("form").dataset.formId;
+  const formId = FORM_ID_FORMAT.test(formIdFromPage)
+    ? formIdFromPage
+    : new URLSearchParams(location.search).get("form") ?? "";
   const form = document.getElementById("form");
   const card = document.getElementById("card");
   const button = document.getElementById("submit");
@@ -400,10 +422,10 @@
   }
   message.addEventListener("input", updateCount);
 
-  const formIdValid = /^[A-Za-z0-9_-]{22,64}$/.test(formId);
+  const formIdValid = FORM_ID_FORMAT.test(formId);
   if (!formIdValid) {
     button.disabled = true;
-    showStatus("fail", "This page needs a form id: open it as /test-form?form=<form id>.");
+    showStatus("fail", "This form link is incomplete. Please check the link you were given.");
   }
 
   function setBusy(busy) {
@@ -522,7 +544,13 @@
       });
     }
 
-    const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
+    // Unhide first: the animation must end at the normal (visible) state.
+    // Both happen before the browser paints, so nothing flashes.
+    document.documentElement.classList.remove("pre");
+    const revealed = ".panel, .eyebrow, .wi, .lead, .points li, #card, #card [data-reveal], #card h2, #card .sub, #card .hint";
+    // When finished, remove the animation's inline styles so nothing can stay hidden.
+    const settle = () => gsap.set(revealed, { clearProps: "opacity,transform,translate,rotate,scale" });
+    const tl = gsap.timeline({ defaults: { ease: "power3.out" }, onComplete: settle });
     tl.from(".panel", { opacity: 0, y: 24, scale: .98, duration: .8 })
       .from(".eyebrow", { opacity: 0, y: 12, duration: .5 }, "-=.45")
       .from(".wi", { yPercent: 110, opacity: 0, duration: .8, stagger: .05 }, "-=.35")
@@ -530,9 +558,8 @@
       .from(".points li", { opacity: 0, x: -14, duration: .55, stagger: .09 }, "-=.4")
       .from("#card", { opacity: 0, y: 34, duration: .8 }, .25)
       .from("#card [data-reveal], #card h2, #card .sub, #card .hint", { opacity: 0, y: 14, duration: .55, stagger: .05 }, .5);
-    document.documentElement.classList.remove("pre");
     // If the browser can't animate (e.g. the tab opened in the background), show everything anyway.
-    setTimeout(() => tl.progress(1), 4000);
+    setTimeout(() => { if (tl.progress() < 1) tl.progress(1); }, 4000);
 
     // Slowly drifting color blobs.
     for (const blob of document.querySelectorAll(".blob")) {

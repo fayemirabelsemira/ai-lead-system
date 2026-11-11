@@ -1,0 +1,26 @@
+{
+  "business_name": "REPLACE_ME Your Business Name",
+  "industry": "OTHER",
+  "description": "REPLACE_ME One or two sentences about what you do and where you are.",
+  "email": "",
+  "phone": "",
+  "timezone": "Asia/Manila",
+  "services": [
+    "REPLACE_ME First service",
+    "REPLACE_ME Second service"
+  ],
+  "pricing": "REPLACE_ME Prices the AI may quote, e.g. 'Consultation: PHP 500. Cleaning: PHP 1,200.' Leave empty if prices should never be quoted.",
+  "faq": [
+    { "q": "REPLACE_ME A question customers often ask", "a": "REPLACE_ME Your answer" }
+  ],
+  "operating_hours": {
+    "mon-fri": "09:00-18:00",
+    "sat": "09:00-12:00"
+  },
+  "telegram_chat_id": 0,
+  "owner": {
+    "email": "REPLACE_ME you@example.com",
+    "telegram_user_id": 0
+  },
+  "automatic_email": false
+}

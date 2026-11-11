@@ -11,7 +11,8 @@
     "test-ai": "node --env-file=../.env scripts/test-ai.js",
     "test": "node --test \"scripts/*.test.js\"",
     "create-form": "node --env-file=../.env scripts/create-form.js",
-    "email": "node --env-file=../.env scripts/email.js"
+    "email": "node --env-file=../.env scripts/email.js",
+    "add-business": "node --env-file=../.env scripts/add-business.js"
   },
   "engines": {
     "node": ">=22"

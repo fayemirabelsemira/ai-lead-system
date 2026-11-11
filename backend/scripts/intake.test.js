@@ -201,15 +201,55 @@ test("CORS headers are sent only to allowed origins", async (t) => {
   assert.equal(bad.headers.get("access-control-allow-origin"), null);
 });
 
-test("health check, unknown paths, and the test form switch", async (t) => {
+test("health check and unknown paths", async (t) => {
   const { base } = await startTestServer(t);
   assert.equal((await fetch(`${base}/health`)).status, 200);
   assert.equal((await fetch(`${base}/nope`)).status, 404);
-  assert.equal((await fetch(`${base}/test-form`)).status, 404); // off unless enabled
-  const withForm = await startTestServer(t, { testFormHtml: "<p>form</p>" });
-  const page = await fetch(`${withForm.base}/test-form`);
-  assert.equal(page.status, 200);
-  assert.match(page.headers.get("content-security-policy"), /default-src 'none'/);
+  assert.equal((await fetch(`${base}/f/${FORM_ID}`)).status, 404); // no page without a template
+});
+
+const TEMPLATE = '<title>__BUSINESS_NAME__</title><form data-form-id="__FORM_ID__"></form><!--DEV_NOTE-->';
+
+test("the form page shows the business name, safely escaped", async (t) => {
+  const lookups = [];
+  const { base } = await startTestServer(t, {
+    formHtml: TEMPLATE,
+    lookupForm: async (id) => { lookups.push(id); return { businessName: 'Ana & Co <script>"' }; },
+  });
+  const res = await fetch(`${base}/f/${FORM_ID}`);
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get("content-security-policy"), /default-src 'none'/);
+  assert.equal(res.headers.get("x-frame-options"), "DENY");
+  const html = await res.text();
+  assert.ok(html.includes("<title>Ana &amp; Co &lt;script&gt;&quot;</title>"));
+  assert.ok(html.includes(`data-form-id="${FORM_ID}"`));
+  assert.ok(!html.includes("Development server")); // production by default
+  await fetch(`${base}/f/${FORM_ID}`);
+  assert.equal(lookups.length, 1, "the lookup is cached");
+});
+
+test("unknown, inactive or malformed form ids get a 'not available' page", async (t) => {
+  let calls = 0;
+  const { base } = await startTestServer(t, { formHtml: TEMPLATE, lookupForm: async () => { calls++; return null; } });
+  const res = await fetch(`${base}/f/${FORM_ID}`);
+  assert.equal(res.status, 404);
+  assert.match(await res.text(), /not available/);
+  assert.equal((await fetch(`${base}/f/short`)).status, 404);
+  assert.equal(calls, 1, "a malformed id never reaches the database");
+});
+
+test("the development note shows only on a development server", async (t) => {
+  const { base } = await startTestServer(t, {
+    formHtml: TEMPLATE, devNote: true, lookupForm: async () => ({ businessName: "Biz" }),
+  });
+  assert.match(await (await fetch(`${base}/f/${FORM_ID}`)).text(), /Development server/);
+});
+
+test("form page views are rate limited per visitor", async (t) => {
+  const { base } = await startTestServer(t, { formHtml: TEMPLATE, lookupForm: async () => ({ businessName: "Biz" }) });
+  let last;
+  for (let i = 0; i < 61; i++) last = await fetch(`${base}/f/${FORM_ID}`);
+  assert.equal(last.status, 429);
 });
 
 test("X-Forwarded-For is ignored unless trustProxy is on", async (t) => {

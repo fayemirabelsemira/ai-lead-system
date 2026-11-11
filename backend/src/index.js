@@ -20,20 +20,24 @@ import { createOutboxWorker } from "./outbox.js";
 import { createGmailSender } from "./email/gmail.js";
 import * as jobsDb from "./jobs-db.js";
 import { supabase } from "./supabase.js";
+import { lookupForm, formUrl } from "./forms.js";
 
 // The worker needs the AI settings; fail now rather than on the first lead.
 required("GROQ_API_KEY");
 required("GROQ_MODEL");
 
-// The test form is a development tool only.
-const testFormPath = new URL("../../test-form/index.html", import.meta.url);
-const testFormHtml = !config.isProduction && existsSync(testFormPath) ? readFileSync(testFormPath, "utf8") : null;
+// The customer form page, served at /f/<form id>.
+const formPath = new URL("../../form/index.html", import.meta.url);
+const formHtml = existsSync(formPath) ? readFileSync(formPath, "utf8") : null;
+if (!formHtml) console.warn("form/index.html not found: the form page is OFF (the intake API still works).");
 
 const server = createServer({
   submit: submitIntake,
   allowedOrigins: config.intakeAllowedOrigins,
   trustProxy: config.trustProxy,
-  testFormHtml,
+  formHtml,
+  lookupForm,
+  devNote: !config.isProduction,
 });
 
 const worker = createWorker(
@@ -60,25 +64,20 @@ if (outbox) outbox.start();
 else console.log("Automatic email is OFF (GMAIL_USER / GMAIL_APP_PASSWORD not set). Approved replies use copy-and-send.");
 server.listen(config.port, async () => {
   console.log(`HTTP server listening on port ${config.port}.`);
-  if (testFormHtml) await printTestFormLinks();
+  if (formHtml) await printFormLinks();
 });
 
-// Development only: print a ready-to-click test-form link for every active form.
-async function printTestFormLinks() {
+// Prints the form link of every active business, so it is easy to find.
+async function printFormLinks() {
   const { data, error } = await supabase
     .from("business_integrations")
-    .select("public_identifier, businesses ( business_name )")
+    .select("public_identifier, businesses!inner ( business_name )")
     .eq("provider", "WEBSITE_FORM")
-    .eq("is_active", true);
-  if (error) return console.error("Could not list test forms:", error.message);
-  if (!data.length) {
-    return console.log("No forms yet. Create one with: npm run create-form -- <business-uuid>");
-  }
-  for (const form of data) {
-    console.log(
-      `Test form (${form.businesses?.business_name}): http://localhost:${config.port}/test-form?form=${form.public_identifier}`
-    );
-  }
+    .eq("is_active", true)
+    .eq("businesses.is_active", true);
+  if (error) return console.error("Could not list forms:", error.message);
+  if (!data.length) return console.log("No active forms yet. Add a business with: npm run add-business -- business.json");
+  for (const form of data) console.log(`Form (${form.businesses.business_name}): ${formUrl(form.public_identifier)}`);
 }
 
 let stopping = false;
