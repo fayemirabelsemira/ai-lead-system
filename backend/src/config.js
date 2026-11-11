@@ -23,6 +23,8 @@ const list = (value) =>
 export const config = {
   supabaseUrl: required("SUPABASE_URL"),
   supabaseSecretKey: required("SUPABASE_SECRET_KEY"),
+  // Public key for the browser dashboard (safe to expose; data is protected by RLS).
+  supabasePublishableKey: optional("SUPABASE_PUBLISHABLE_KEY"),
   telegramBotToken: required("TELEGRAM_BOT_TOKEN"),
   isProduction: process.env.NODE_ENV === "production",
   port: Number(process.env.PORT) || 3000,

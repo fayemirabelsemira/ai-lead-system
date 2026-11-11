@@ -5,20 +5,20 @@ The AI analyzes and drafts replies. The business owner always approves before
 anything is sent to a customer.
 
 ## Status
-Working today: database schema (migrations 001-012), website-form intake API,
+Working today: database schema (migrations 001-013), website-form intake API,
 job worker (AI analysis -> Telegram card), Telegram approval bot
 (approve / edit / reject / view), copy-and-send delivery (the owner copies
 the approved reply, sends it by SMS/Viber/Messenger/email, taps "I sent it"),
 automatic email from the owner's Gmail (optional, per business; failures
 fall back to copy-and-send), customer form page at /f/<form id>,
 `add-business` onboarding script, crash recovery (stuck jobs and emails,
-undelivered cards, approval expiry).
-Not built yet: follow-ups, Tally/generic webhooks,
-dashboard, Resend (custom-domain email).
+undelivered cards, approval expiry), owner dashboard at /app (approve/edit
+replies, outcome and notes).
+Not built yet: follow-ups, Tally/generic webhooks, Resend (custom-domain email).
 
 ## Folder structure
 - backend/            API, webhooks, AI wrapper, business logic
-- dashboard/          business dashboard (frontend)
+- dashboard/          owner dashboard (served at /app)
 - n8n/                automation engine setup (no credentials)
 - supabase/migrations/ SQL files, run manually in the Supabase SQL Editor
 - form/               the customer inquiry form page (served at /f/<form id>)
@@ -28,8 +28,8 @@ dashboard, Resend (custom-domain email).
 ## Setup
 1. Copy .env.example to .env
 2. Fill in real values (never commit .env)
-3. Run every file in supabase/migrations/ in order (001 -> 012) in the
-   Supabase SQL Editor. 008-012 are safe to re-run.
+3. Run every file in supabase/migrations/ in order (001 -> 013) in the
+   Supabase SQL Editor. 008-013 are safe to re-run.
    On a production database, skip 006 (test data).
 
 ## Running the backend
@@ -60,6 +60,34 @@ dashboard, Resend (custom-domain email).
    moves to your business.
 4. To change the info later, edit business.json and run it again: the
    business is matched by its Telegram chat.
+
+## Dashboard
+`npm run dev` / `npm run demo` print `Dashboard: <address>/app`. Business owners
+sign in with a code emailed by Supabase (no password; only existing owner
+accounts can sign in). White by default, with a dark-mode switch (remembered
+per browser). It shows inquiries per day, lead quality, reply speed, deals won,
+what needs attention, and every lead with search and filters.
+
+On a lead, the owner can do what the Telegram card does:
+- approve the AI's reply as is, or edit it first, or reject it
+- write a reply when the AI did not draft one (or the draft was rejected/expired)
+- copy a copy-and-send reply and mark "I sent it"
+- set the outcome (Open / Won / Lost / Not interested) and keep private notes
+
+Approved replies go out the same way as from Telegram (email if it is on for
+the business, otherwise copy-and-send). Whichever is used first wins: the
+other one then says the reply was already handled. The actions are database
+functions in migration 013 that check the signed-in owner's role; database
+rules (RLS) make sure an owner only ever sees their own business. It needs
+SUPABASE_PUBLISHABLE_KEY and migration 013.
+
+One-time Supabase settings (Authentication section):
+- Emails -> Templates -> **Magic Link**: add the code to the email, e.g.
+  `<p>Your sign-in code: <strong>{{ .Token }}</strong></p>`
+- URL Configuration -> Redirect URLs: add `http://localhost:3000/app` and
+  `https://*.trycloudflare.com/app` (so the link in the email also works).
+Supabase's built-in email allows only a few emails per hour; sessions last,
+so you rarely need a new code.
 
 ## Crash recovery
 Every minute (and right after start) the backend checks for interrupted work:

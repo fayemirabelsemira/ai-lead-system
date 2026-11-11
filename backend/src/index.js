@@ -4,7 +4,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { hostname } from "node:os";
 import { config, required } from "./config.js";
 import { startBot } from "./bot.js";
-import { createServer } from "./server.js";
+import { createServer, renderDashboard } from "./server.js";
 import { createWorker } from "./worker.js";
 import { submitIntake } from "./intake/submit.js";
 import { analyzeInquiry } from "./ai/analyze.js";
@@ -33,6 +33,23 @@ const formPath = new URL("../../form/index.html", import.meta.url);
 const formHtml = existsSync(formPath) ? readFileSync(formPath, "utf8") : null;
 if (!formHtml) console.warn("form/index.html not found: the form page is OFF (the intake API still works).");
 
+// The owner dashboard, served at /app. Needs the PUBLIC (publishable) key.
+const dashboardPath = new URL("../../dashboard/index.html", import.meta.url);
+const supabaseBrowserPath = new URL("../node_modules/@supabase/supabase-js/dist/umd/supabase.js", import.meta.url);
+let dashboard = null;
+if (!config.supabasePublishableKey) {
+  console.warn("Dashboard is OFF: set SUPABASE_PUBLISHABLE_KEY to turn on /app.");
+} else if (existsSync(dashboardPath) && existsSync(supabaseBrowserPath)) {
+  dashboard = {
+    html: renderDashboard(readFileSync(dashboardPath, "utf8"), {
+      supabaseUrl: config.supabaseUrl,
+      publishableKey: config.supabasePublishableKey,
+    }),
+    script: readFileSync(supabaseBrowserPath),
+    supabaseOrigin: new URL(config.supabaseUrl).origin,
+  };
+}
+
 const server = createServer({
   submit: submitIntake,
   allowedOrigins: config.intakeAllowedOrigins,
@@ -40,6 +57,7 @@ const server = createServer({
   formHtml,
   lookupForm,
   devNote: !config.isProduction,
+  dashboard,
 });
 
 const worker = createWorker(
@@ -77,6 +95,7 @@ else console.log("Automatic email is OFF (GMAIL_USER / GMAIL_APP_PASSWORD not se
 server.listen(config.port, config.host, async () => {
   console.log(`HTTP server listening on ${config.host ?? "all interfaces"}, port ${config.port}.`);
   if (formHtml) await printFormLinks();
+  if (dashboard) console.log(`Dashboard: ${config.publicBaseUrl}/app`);
 });
 
 // Prints the form link of every active business, so it is easy to find.

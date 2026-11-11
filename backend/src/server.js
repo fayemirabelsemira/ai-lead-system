@@ -2,6 +2,7 @@
 //   GET  /health                   for the host's health checks
 //   POST /intake/<form id>         website form submissions
 //   GET  /f/<form id>              the customer inquiry form page
+//   GET  /app                      the owner dashboard (read-only, Supabase login)
 // The database call is passed in as `submit`, so this file has no I/O of its own.
 import { createServer as createHttpServer } from "node:http";
 import { validateSubmission } from "./intake/validate.js";
@@ -40,6 +41,18 @@ export function renderFormPage(template, { formId, businessName, devNote }) {
     .replaceAll("__FORM_ID__", escapeHtml(formId))
     .replaceAll("__BUSINESS_NAME__", escapeHtml(businessName))
     .replace("<!--DEV_NOTE-->", devNote ? '<p class="dev">Development server</p>' : "");
+}
+
+// The dashboard talks only to this server (its script) and to Supabase.
+const dashboardCsp = (supabaseOrigin) =>
+  "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; " +
+  `connect-src ${supabaseOrigin}; img-src 'self' data:; form-action 'none'; base-uri 'none'; frame-ancestors 'none'`;
+
+// Fills in the dashboard's public Supabase settings (URL + publishable key).
+export function renderDashboard(template, { supabaseUrl, publishableKey }) {
+  return template
+    .replaceAll("__SUPABASE_URL__", escapeHtml(supabaseUrl))
+    .replaceAll("__SUPABASE_PUBLISHABLE_KEY__", escapeHtml(publishableKey));
 }
 
 class HttpError extends Error {
@@ -86,6 +99,7 @@ export function createServer({
   formHtml = null,
   lookupForm = async () => null,
   devNote = false,
+  dashboard = null, // { html, script, supabaseOrigin }
   perMinute = 5,
   perHour = 30,
   log = console,
@@ -184,6 +198,24 @@ export function createServer({
       const path = url.pathname.replace(/\/+$/, "") || "/";
 
       if (path === "/health" && req.method === "GET") return send(res, 200, { ok: true });
+
+      // Sign-in links from Supabase may land on "/"; the #fragment survives the redirect.
+      if (dashboard && req.method === "GET" && path === "/") {
+        res.writeHead(302, { ...BASE_HEADERS, Location: "/app" });
+        return res.end();
+      }
+
+      if (dashboard && req.method === "GET" && (path === "/app" || path === "/app/supabase.js")) {
+        const isScript = path === "/app/supabase.js";
+        res.writeHead(200, {
+          ...BASE_HEADERS,
+          "Content-Type": isScript ? "text/javascript; charset=utf-8" : "text/html; charset=utf-8",
+          ...(isScript
+            ? { "Cache-Control": "public, max-age=3600" }
+            : { "Content-Security-Policy": dashboardCsp(dashboard.supabaseOrigin), "X-Frame-Options": "DENY" }),
+        });
+        return res.end(isScript ? dashboard.script : dashboard.html);
+      }
 
       const page = /^\/f\/([^/]+)$/.exec(path);
       if (page && req.method === "GET" && formHtml) return await handleFormPage(req, res, page[1]);

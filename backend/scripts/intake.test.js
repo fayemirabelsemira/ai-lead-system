@@ -367,3 +367,44 @@ test("worker: an unknown job type is not run and is retried", async () => {
   await runOnce(deps, { ...job(), job_type: "SOMETHING_ELSE" });
   assert.deepEqual(log, [["finish", "job1", "PENDING"]]);
 });
+
+// ---------- dashboard ----------
+import { renderDashboard } from "../src/server.js";
+
+test("the dashboard is served with a CSP that only allows Supabase", async (t) => {
+  const { base } = await startTestServer(t, {
+    dashboard: { html: "<p>dash</p>", script: Buffer.from("var supabase={}"), supabaseOrigin: "https://abc.supabase.co" },
+  });
+  const page = await fetch(`${base}/app`);
+  assert.equal(page.status, 200);
+  const csp = page.headers.get("content-security-policy");
+  assert.match(csp, /connect-src https:\/\/abc\.supabase\.co;/);
+  assert.match(csp, /script-src 'self'/);
+  assert.equal(page.headers.get("x-frame-options"), "DENY");
+  const js = await fetch(`${base}/app/supabase.js`);
+  assert.equal(js.status, 200);
+  assert.match(js.headers.get("content-type"), /javascript/);
+});
+
+test("without a publishable key there is no dashboard", async (t) => {
+  const { base } = await startTestServer(t);
+  assert.equal((await fetch(`${base}/app`)).status, 404);
+  assert.equal((await fetch(`${base}/app/supabase.js`)).status, 404);
+});
+
+test("dashboard settings are escaped into the page", () => {
+  const html = renderDashboard('<body data-u="__SUPABASE_URL__" data-k="__SUPABASE_PUBLISHABLE_KEY__">', {
+    supabaseUrl: "https://x.supabase.co", publishableKey: 'sb_publishable_"><script>',
+  });
+  assert.ok(html.includes('data-u="https://x.supabase.co"'));
+  assert.ok(html.includes("sb_publishable_&quot;&gt;&lt;script&gt;"));
+});
+
+test("the home page sends people to the dashboard", async (t) => {
+  const { base } = await startTestServer(t, {
+    dashboard: { html: "<p>dash</p>", script: Buffer.from(""), supabaseOrigin: "https://abc.supabase.co" },
+  });
+  const res = await fetch(`${base}/`, { redirect: "manual" });
+  assert.equal(res.status, 302);
+  assert.equal(res.headers.get("location"), "/app");
+});
