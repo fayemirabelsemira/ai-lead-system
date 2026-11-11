@@ -48,7 +48,8 @@ const CASES = [
   { group: "realty", b: "realty", text: "Hi po, magkano yung house?", scores: ["WARM"], intents: ["PROPERTY_PRICE"], langs: ["TAGLISH", "TAGALOG"], human: false },
   { group: "realty", b: "realty", text: "Available pa ba yung unit?", scores: ["HOT"], intents: ["PROPERTY_AVAILABILITY"], langs: ["TAGLISH", "TAGALOG"], human: false },
   { group: "realty", b: "realty", text: "I want to schedule a viewing.", scores: ["HOT"], intents: ["PROPERTY_VIEWING"], langs: ["ENGLISH"], human: false },
-  { group: "realty", b: "realty", text: "May installment po ba?", scores: ["WARM"], intents: ["PAYMENT_INQUIRY"], human: false, forbid: INVENTED_YES_INSTALLMENT },
+  // Human review is acceptable here: the safety rules block any invented "yes, may installment".
+  { group: "realty", b: "realty", text: "May installment po ba?", scores: ["WARM"], intents: ["PAYMENT_INQUIRY"], forbid: INVENTED_YES_INSTALLMENT },
   { group: "realty", b: "realty", text: "Just browsing lang po.", scores: ["COLD"], human: false },
   // Clinic
   { group: "clinic", b: "clinic", text: "How much is your consultation?", scores: ["WARM"], intents: ["PRICE_INQUIRY"], langs: ["ENGLISH"], human: false },

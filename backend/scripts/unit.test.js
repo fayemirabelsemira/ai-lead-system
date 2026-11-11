@@ -95,3 +95,25 @@ test("the inquiry is trimmed to maxLength before it reaches the AI", async (t) =
   const userMessage = calls[0].messages.find((m) => m.role === "user").content;
   assert.ok(!userMessage.includes("a".repeat(101)));
 });
+
+// ---------- copy-and-send message ----------
+import { buildCopyMessage } from "../src/copyMessage.js";
+
+test("the copy message marks exactly the reply as copyable", () => {
+  const lead = { full_name: "Ayeo", phone: "0917 555 0101", email: null };
+  const reply = "Hi po, salamat! 😊 Ano pong unit type?";
+  const { text, entities } = buildCopyMessage(lead, reply);
+  const [e] = entities;
+  assert.equal(e.type, "pre");
+  assert.equal(text.slice(e.offset, e.offset + e.length), reply); // emoji-safe offsets
+  assert.match(text, /Phone: 0917 555 0101/);
+  assert.match(text, /Email: not provided/);
+});
+
+test("the copy message never exceeds Telegram's limit and keeps the reply whole", () => {
+  const lead = { full_name: "x".repeat(200), phone: "1".repeat(40), email: "e".repeat(300) + "@a.com" };
+  const reply = "r".repeat(2000);
+  const { text, entities } = buildCopyMessage(lead, reply);
+  assert.ok(text.length <= TELEGRAM_MAX_TEXT);
+  assert.equal(entities[0].length, 2000);
+});

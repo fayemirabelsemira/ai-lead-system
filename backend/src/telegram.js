@@ -30,7 +30,13 @@ export const getUpdates = (offset, signal) =>
 // customer-written text must never be able to inject formatting.
 // Text is capped at Telegram's limit so an oversized message never fails to send.
 export const sendMessage = (chatId, text, extra = {}) =>
-  call("sendMessage", { chat_id: chatId, text: clip(text, TELEGRAM_MAX_TEXT), ...extra });
+  call("sendMessage", {
+    chat_id: chatId,
+    text: clip(text, TELEGRAM_MAX_TEXT),
+    // No link previews: links in customer messages or errors must not unfurl.
+    link_preview_options: { is_disabled: true },
+    ...extra,
+  });
 
 export const editMessageText = (chatId, messageId, text, extra = {}) =>
   call("editMessageText", {

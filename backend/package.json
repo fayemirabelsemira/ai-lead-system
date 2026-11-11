@@ -4,17 +4,20 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node src/bot.js",
-    "dev": "node --env-file=../.env src/bot.js",
+    "start": "node src/index.js",
+    "dev": "node --env-file=../.env src/index.js",
     "send-card": "node --env-file=../.env scripts/send-card.js",
     "test-safety": "node --test scripts/safety.test.js",
     "test-ai": "node --env-file=../.env scripts/test-ai.js",
-    "test": "node --test \"scripts/*.test.js\""
+    "test": "node --test \"scripts/*.test.js\"",
+    "create-form": "node --env-file=../.env scripts/create-form.js",
+    "email": "node --env-file=../.env scripts/email.js"
   },
   "engines": {
     "node": ">=22"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.119.0"
+    "@supabase/supabase-js": "^2.119.0",
+    "nodemailer": "10.2.1"
   }
 }

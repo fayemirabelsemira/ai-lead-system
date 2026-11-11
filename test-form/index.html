@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Send an Inquiry</title>
+<script>
+  // Hide animated elements until the animation starts, so they don't flash.
+  // Skipped for "reduce motion"; a timer makes sure nothing stays hidden.
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    document.documentElement.classList.add("pre");
+    setTimeout(() => document.documentElement.classList.remove("pre"), 2500);
+  }
+</script>
+<style>
+  :root {
+    --bg: #f6f8fc; --bg-2: #eef2fa; --surface: #ffffff; --field: #fbfcfe;
+    --text: #0b1f3a; --muted: #55627a; --line: #e2e7f0; --line-strong: #cbd3e1;
+    --accent: #5a4ff3; --accent-hover: #4a3fe0; --accent-soft: rgba(90, 79, 243, .16);
+    --error: #c0262d; --error-soft: rgba(192, 38, 45, .12); --ok: #0b7a4b;
+    --shadow: 0 50px 100px -20px rgba(30, 40, 90, .22), 0 30px 60px -30px rgba(0, 0, 0, .25);
+    --panel-a: #2a1b8f; --panel-b: #4f46e5;
+    --blob-1: #7c3aed; --blob-2: #db2777; --blob-3: #0891b2; --blob-4: #f97316;
+    --radius: 18px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #060b16; --bg-2: #0b1324; --surface: #0e1728; --field: #0b1322;
+      --text: #e8edf6; --muted: #98a4bb; --line: #1d2940; --line-strong: #2c3a55;
+      --accent: #8a82ff; --accent-hover: #a39dff; --accent-soft: rgba(138, 130, 255, .2);
+      --error: #ff7a72; --error-soft: rgba(255, 122, 114, .14); --ok: #4ad99a;
+      --shadow: 0 50px 100px -20px rgba(0, 0, 0, .6), 0 30px 60px -30px rgba(0, 0, 0, .7);
+      --panel-a: #1a1060; --panel-b: #3730a3;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html.lenis, html.lenis body { height: auto; }
+  .lenis.lenis-smooth { scroll-behavior: auto !important; }
+  body {
+    margin: 0; min-height: 100vh; color: var(--text); background: var(--bg);
+    font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased; overflow-x: hidden;
+  }
+  /* Soft page backdrop: a faint slanted band and a dot grid. */
+  .backdrop { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+  .backdrop::before {
+    content: ""; position: absolute; left: -10%; right: -10%; top: -30vh; height: 75vh;
+    background: linear-gradient(100deg, var(--bg-2), var(--bg));
+    transform: skewY(-8deg); transform-origin: top left;
+  }
+  .backdrop::after {
+    content: ""; position: absolute; inset: 0;
+    background-image: radial-gradient(var(--line) 1px, transparent 1px);
+    background-size: 22px 22px; opacity: .55;
+    mask-image: linear-gradient(to bottom, #000, transparent 70%);
+    -webkit-mask-image: linear-gradient(to bottom, #000, transparent 70%);
+  }
+
+  .shell {
+    max-width: 1100px; margin: 0 auto; padding: 48px 24px 32px;
+    display: grid; grid-template-columns: 1fr 1.05fr; gap: 28px; align-items: stretch;
+  }
+
+  /* ---------- Left: colored intro panel ---------- */
+  .panel {
+    position: relative; overflow: hidden; isolation: isolate; color: #fff;
+    border-radius: var(--radius); padding: 44px 40px;
+    background: linear-gradient(150deg, var(--panel-a), var(--panel-b));
+    box-shadow: var(--shadow);
+    display: flex; flex-direction: column;
+  }
+  .blob { position: absolute; z-index: -2; border-radius: 50%; filter: blur(60px); opacity: .75; }
+  .b1 { width: 340px; height: 340px; background: var(--blob-1); top: -90px; left: -80px; }
+  .b2 { width: 300px; height: 300px; background: var(--blob-2); top: 30%; right: -110px; }
+  .b3 { width: 280px; height: 280px; background: var(--blob-3); bottom: -120px; left: 10%; }
+  .b4 { width: 180px; height: 180px; background: var(--blob-4); top: 52%; left: 38%; opacity: .45; }
+  /* Keeps white text readable over every blob color. */
+  .panel::after {
+    content: ""; position: absolute; inset: 0; z-index: -1;
+    background: linear-gradient(180deg, rgba(8, 10, 40, .18), rgba(8, 10, 40, .42));
+  }
+  .eyebrow {
+    align-self: flex-start; display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 12px; border-radius: 999px; font-size: .8rem; font-weight: 600; letter-spacing: .02em;
+    background: rgba(255, 255, 255, .14); border: 1px solid rgba(255, 255, 255, .22);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .pulse { width: 8px; height: 8px; border-radius: 50%; background: #5ff0b0; position: relative; }
+  .pulse::after {
+    content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid #5ff0b0;
+    animation: ping 2s ease-out infinite;
+  }
+  @keyframes ping { from { transform: scale(.6); opacity: .9; } to { transform: scale(1.8); opacity: 0; } }
+  h1 {
+    margin: 26px 0 14px; font-size: clamp(2rem, 1.3rem + 2.4vw, 3rem); line-height: 1.08;
+    letter-spacing: -.025em; font-weight: 750;
+  }
+  h1 .line { display: block; }
+  h1 .line + .line { color: rgba(255, 255, 255, .78); }
+  /* Word-by-word reveal (spans are added by the script). */
+  .w { display: inline-block; overflow: hidden; vertical-align: top; padding-bottom: .06em; margin-bottom: -.06em; }
+  .wi { display: inline-block; will-change: transform; }
+  .lead { margin: 0; max-width: 34ch; font-size: 1.06rem; color: rgba(255, 255, 255, .88); }
+  .points { list-style: none; margin: auto 0 0; padding: 36px 0 0; display: grid; gap: 18px; }
+  .points li { display: grid; grid-template-columns: 40px 1fr; gap: 14px; align-items: start; }
+  .icon {
+    width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
+    background: rgba(255, 255, 255, .14); border: 1px solid rgba(255, 255, 255, .2);
+  }
+  .icon svg { width: 20px; height: 20px; }
+  .points strong { display: block; font-size: .98rem; }
+  .points span { font-size: .9rem; color: rgba(255, 255, 255, .8); }
+
+  /* ---------- Right: form card ---------- */
+  .card {
+    position: relative; overflow: hidden; isolation: isolate;
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 36px; box-shadow: var(--shadow);
+  }
+  /* A soft light that follows the pointer (mouse only). */
+  .card::before {
+    content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background: radial-gradient(420px circle at var(--mx, 50%) var(--my, -20%), var(--accent-soft), transparent 60%);
+    opacity: 0; transition: opacity .4s ease;
+  }
+  .card.lit::before { opacity: 1; }
+  .card h2 { margin: 0 0 4px; font-size: 1.35rem; letter-spacing: -.015em; }
+  .card .sub { margin: 0 0 22px; color: var(--muted); font-size: .95rem; }
+
+  .field { margin-top: 16px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  label { display: block; font-weight: 600; font-size: .9rem; margin-bottom: 6px; transition: color .2s; }
+  .field:focus-within > label { color: var(--accent); }
+  .hint { display: block; margin-top: 8px; font-size: .82rem; color: var(--muted); }
+  input[type=text], input[type=email], input[type=tel], textarea {
+    width: 100%; padding: 11px 14px; font: inherit; font-size: 1rem; color: inherit;
+    background: var(--field); border: 1px solid var(--line-strong); border-radius: 10px;
+    transition: border-color .2s, box-shadow .2s, background-color .2s;
+  }
+  input::placeholder, textarea::placeholder { color: var(--muted); opacity: .7; }
+  input:hover, textarea:hover { border-color: var(--muted); }
+  input:focus, textarea:focus {
+    outline: none; border-color: var(--accent); background: var(--surface);
+    box-shadow: 0 0 0 4px var(--accent-soft);
+  }
+  [aria-invalid="true"] { border-color: var(--error) !important; box-shadow: 0 0 0 4px var(--error-soft) !important; }
+  textarea { min-height: 132px; resize: vertical; display: block; }
+  .count { text-align: right; font-size: .78rem; color: var(--muted); margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .count.near { color: var(--error); }
+
+  .consent {
+    display: flex; gap: 12px; align-items: flex-start; margin-top: 20px; padding: 14px;
+    border: 1px solid var(--line); border-radius: 12px; background: var(--field);
+    font-weight: 400; font-size: .9rem; color: var(--muted); cursor: pointer;
+    transition: border-color .2s, background-color .2s;
+  }
+  .consent:hover { border-color: var(--line-strong); }
+  .consent input {
+    appearance: none; -webkit-appearance: none; flex: none; margin: 2px 0 0;
+    width: 20px; height: 20px; border-radius: 6px; border: 1.5px solid var(--line-strong);
+    background: var(--surface); display: grid; place-items: center; cursor: pointer;
+    transition: background-color .2s, border-color .2s, box-shadow .2s;
+  }
+  .consent input::after {
+    content: ""; width: 10px; height: 6px; border: 2px solid #fff; border-top: 0; border-right: 0;
+    transform: rotate(-45deg) scale(0); margin-top: -2px; transition: transform .18s ease;
+  }
+  .consent input:checked { background: var(--accent); border-color: var(--accent); }
+  .consent input:checked::after { transform: rotate(-45deg) scale(1); }
+  .consent input:focus-visible { outline: none; box-shadow: 0 0 0 4px var(--accent-soft); }
+  .consent:has(input:checked) { border-color: var(--accent); }
+
+  .error { color: var(--error); font-size: .84rem; margin-top: 6px; }
+  .error:empty { display: none; }
+  .trap { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+
+  .btn {
+    position: relative; margin-top: 24px; width: 100%; min-height: 50px; padding: 12px 18px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+    font: inherit; font-weight: 650; color: #fff; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent), #7c5cff 60%, #a35cff);
+    background-size: 160% 100%; background-position: 0 0;
+    border: 0; border-radius: 12px; box-shadow: 0 8px 22px -8px rgba(90, 79, 243, .65);
+    transition: background-position .5s ease, box-shadow .25s ease, opacity .2s;
+  }
+  .btn:hover { background-position: 100% 0; box-shadow: 0 12px 28px -8px rgba(90, 79, 243, .8); }
+  .btn:focus-visible { outline: none; box-shadow: 0 0 0 4px var(--accent-soft), 0 8px 22px -8px rgba(90, 79, 243, .65); }
+  .btn:disabled { opacity: .6; cursor: not-allowed; }
+  .btn.busy { cursor: wait; }
+  .btn .arrow { width: 18px; height: 18px; transition: transform .25s ease; }
+  .btn:hover:not(:disabled) .arrow { transform: translateX(4px); }
+  .spinner {
+    display: none; width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, .35); border-top-color: #fff; animation: spin .7s linear infinite;
+  }
+  .btn.busy .spinner { display: block; }
+  .btn.busy .arrow { display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .status { margin-top: 16px; padding: 12px 14px; border-radius: 10px; font-size: .92rem; display: none; }
+  .status.ok { display: block; color: var(--ok); border: 1px solid currentColor; }
+  .status.fail { display: block; color: var(--error); background: var(--error-soft); border: 1px solid currentColor; }
+
+  /* ---------- Success ---------- */
+  .success { text-align: center; padding: 40px 8px 16px; }
+  .success[hidden] { display: none; }
+  .check { width: 76px; height: 76px; margin: 0 auto 18px; display: block; }
+  .check circle { fill: none; stroke: var(--ok); stroke-width: 2.5; opacity: .9; }
+  .check path { fill: none; stroke: var(--ok); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
+  .success.play circle { stroke-dasharray: 151; stroke-dashoffset: 151; animation: draw .6s ease-out forwards; }
+  .success.play path { stroke-dasharray: 36; stroke-dashoffset: 36; animation: draw .4s .45s ease-out forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .success h2 { outline: none; }
+  .success p { color: var(--muted); margin: 6px auto 0; max-width: 34ch; }
+  .btn-ghost {
+    margin-top: 26px; padding: 10px 18px; font: inherit; font-weight: 600; font-size: .95rem;
+    color: var(--accent); background: transparent; border: 1px solid var(--line-strong);
+    border-radius: 10px; cursor: pointer; transition: border-color .2s, background-color .2s;
+  }
+  .btn-ghost:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .btn-ghost:focus-visible { outline: none; box-shadow: 0 0 0 4px var(--accent-soft); }
+
+  .dev { margin: 0 0 32px; font-size: .8rem; color: var(--muted); text-align: center; }
+
+  .pre [data-reveal], .pre .wi { opacity: 0; }
+
+  @media (max-width: 860px) {
+    .shell { grid-template-columns: 1fr; padding: 16px 16px 24px; gap: 16px; }
+    .panel { padding: 30px 24px; }
+    h1 { margin-top: 20px; }
+    /* Keep the form close to the top on phones. */
+    .points { display: none; }
+    .card { padding: 26px 20px; }
+  }
+  @media (max-width: 480px) {
+    .row { grid-template-columns: 1fr; gap: 0; }
+    .row .field + .field { margin-top: 16px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="backdrop" aria-hidden="true"></div>
+
+<main class="shell">
+  <section class="panel" aria-labelledby="title">
+    <span class="blob b1" aria-hidden="true"></span>
+    <span class="blob b2" aria-hidden="true"></span>
+    <span class="blob b3" aria-hidden="true"></span>
+    <span class="blob b4" aria-hidden="true"></span>
+
+    <span class="eyebrow" data-reveal><span class="pulse" aria-hidden="true"></span>We read every inquiry</span>
+    <h1 id="title">
+      <span class="line" data-split>Tell us what you need.</span>
+      <span class="line" data-split>We'll take it from here.</span>
+    </h1>
+    <p class="lead" data-reveal>Send a short message and we will get back to you by email or phone.</p>
+
+    <ul class="points">
+      <li data-reveal>
+        <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg></span>
+        <div><strong>Straight to our team</strong><span>Your message reaches us right away.</span></div>
+      </li>
+      <li data-reveal>
+        <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+        <div><strong>A reply your way</strong><span>By email or phone, whichever you leave us.</span></div>
+      </li>
+      <li data-reveal>
+        <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+        <div><strong>Your details stay private</strong><span>Used only to answer this inquiry.</span></div>
+      </li>
+    </ul>
+  </section>
+
+  <section class="card" id="card" aria-labelledby="form-title" data-reveal>
+    <form id="form" novalidate>
+      <h2 id="form-title">Send us an inquiry</h2>
+      <p class="sub">It only takes a minute.</p>
+
+      <div class="field" data-reveal>
+        <label for="full_name">Name</label>
+        <input id="full_name" name="full_name" type="text" maxlength="200" autocomplete="name" required aria-describedby="err-full_name">
+        <div class="error" id="err-full_name" data-for="full_name"></div>
+      </div>
+
+      <div class="row" data-reveal>
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" maxlength="320" autocomplete="email" placeholder="you@example.com" aria-describedby="contact-hint err-email err-contact">
+          <div class="error" id="err-email" data-for="email"></div>
+        </div>
+        <div class="field">
+          <label for="phone">Mobile number</label>
+          <input id="phone" name="phone" type="tel" maxlength="40" autocomplete="tel" placeholder="0917 123 4567" aria-describedby="contact-hint err-phone err-contact">
+          <div class="error" id="err-phone" data-for="phone"></div>
+        </div>
+      </div>
+      <span class="hint" id="contact-hint">Leave an email or a mobile number (at least one) so we can reply.</span>
+      <div class="error" id="err-contact" data-for="contact"></div>
+
+      <div class="field" data-reveal>
+        <label for="message">Message</label>
+        <textarea id="message" name="message" maxlength="5000" required data-lenis-prevent placeholder="What can we help you with?" aria-describedby="err-message message-count"></textarea>
+        <div class="count" id="message-count" aria-live="off">0 / 5000</div>
+        <div class="error" id="err-message" data-for="message"></div>
+      </div>
+
+      <!-- Hidden from people; bots tend to fill it in. -->
+      <div class="trap" aria-hidden="true">
+        <label for="website">Website</label>
+        <input id="website" name="website" type="text" tabindex="-1" autocomplete="off">
+      </div>
+
+      <label class="consent" data-reveal>
+        <input id="consent" name="consent" type="checkbox" aria-describedby="err-consent">
+        <span>I agree to be contacted about my inquiry by email or phone. My details are used only to respond to this inquiry.</span>
+      </label>
+      <div class="error" id="err-consent" data-for="consent"></div>
+
+      <button id="submit" class="btn" type="submit" data-reveal>
+        <span class="spinner" aria-hidden="true"></span>
+        <span id="submit-label">Send inquiry</span>
+        <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+      </button>
+      <div id="status" class="status" role="status" aria-live="polite"></div>
+    </form>
+
+    <div id="success" class="success" hidden>
+      <svg class="check" viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="24"/><path d="M15 27l7 7 15-15"/></svg>
+      <h2 id="success-title" tabindex="-1">Inquiry received</h2>
+      <p>Thank you! Your inquiry was received. We will get back to you soon.</p>
+      <button type="button" id="again" class="btn-ghost">Send another inquiry</button>
+    </div>
+  </section>
+</main>
+<p class="dev">Development test form</p>
+
+<!-- Animation libraries. Pinned versions with integrity hashes; the form works without them. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"
+        integrity="sha384-g4NTh/Iv5PPU4xPyhEWqPcwtNXOvdaDI8LLnyYfyNZOjKJeYQyjzQ9X5275eBjpt"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://unpkg.com/lenis@1.1.13/dist/lenis.min.js"
+        integrity="sha384-B2WBjDzEjJpYvhmi2UyEn7rektqkf5suS6sNoyyrf0EBAwBHdkiXxIlU0V5Ru2ed"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+  // Where the API lives. "" = the same server that serves this page.
+  // When hosting this page elsewhere, set the API's full address here.
+  const API_BASE = "";
+
+  const formId = new URLSearchParams(location.search).get("form") ?? "";
+  const form = document.getElementById("form");
+  const card = document.getElementById("card");
+  const button = document.getElementById("submit");
+  const buttonLabel = document.getElementById("submit-label");
+  const statusBox = document.getElementById("status");
+  const success = document.getElementById("success");
+  const message = document.getElementById("message");
+  const counter = document.getElementById("message-count");
+  // One id per inquiry: a double-click or retry is recognised as the same submission.
+  let submissionId = crypto.randomUUID();
+
+  const motion = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const finePointer = matchMedia("(hover: hover) and (pointer: fine)").matches;
+  const gsap = motion ? window.gsap : undefined;
+
+  function showStatus(kind, text) {
+    statusBox.className = `status ${kind}`;
+    statusBox.textContent = text;
+  }
+
+  // Which inputs each server error belongs to (to highlight them).
+  const ERROR_INPUTS = {
+    full_name: ["full_name"], email: ["email"], phone: ["phone"],
+    contact: ["email", "phone"], message: ["message"], consent: ["consent"],
+  };
+
+  function showErrors(errors) {
+    for (const el of form.querySelectorAll(".error")) el.textContent = errors[el.dataset.for] ?? "";
+    for (const input of form.querySelectorAll("input, textarea")) input.removeAttribute("aria-invalid");
+    let first = null;
+    for (const [key, ids] of Object.entries(ERROR_INPUTS)) {
+      if (!errors[key]) continue;
+      for (const id of ids) {
+        const input = document.getElementById(id);
+        input.setAttribute("aria-invalid", "true");
+        first ??= input;
+      }
+    }
+    return first;
+  }
+
+  function updateCount() {
+    const n = message.value.length;
+    counter.textContent = `${n} / 5000`;
+    counter.classList.toggle("near", n > 4500);
+  }
+  message.addEventListener("input", updateCount);
+
+  const formIdValid = /^[A-Za-z0-9_-]{22,64}$/.test(formId);
+  if (!formIdValid) {
+    button.disabled = true;
+    showStatus("fail", "This page needs a form id: open it as /test-form?form=<form id>.");
+  }
+
+  function setBusy(busy) {
+    button.disabled = busy || !formIdValid;
+    button.classList.toggle("busy", busy);
+    buttonLabel.textContent = busy ? "Sending..." : "Send inquiry";
+  }
+
+  function scrollToCard() {
+    if (card.getBoundingClientRect().top >= 0) return;
+    if (window.lenis) window.lenis.scrollTo(card, { offset: -16 });
+    else card.scrollIntoView({ behavior: motion ? "smooth" : "auto", block: "start" });
+  }
+
+  function showSuccess() {
+    const reveal = () => {
+      form.hidden = true;
+      success.hidden = false;
+      success.classList.remove("play");
+      void success.offsetWidth; // restart the checkmark animation
+      if (motion) success.classList.add("play");
+      document.getElementById("success-title").focus({ preventScroll: true });
+      scrollToCard();
+      if (gsap) gsap.from(success.children, { opacity: 0, y: 14, duration: .5, stagger: .07, ease: "power2.out" });
+    };
+    if (gsap) gsap.to(form, { opacity: 0, y: -10, duration: .25, ease: "power1.in", onComplete: () => { gsap.set(form, { clearProps: "all" }); reveal(); } });
+    else reveal();
+  }
+
+  document.getElementById("again").addEventListener("click", () => {
+    success.hidden = true;
+    form.hidden = false;
+    statusBox.className = "status";
+    if (gsap) gsap.from(form.querySelectorAll("[data-reveal], h2, .sub"), { opacity: 0, y: 12, duration: .45, stagger: .05, ease: "power2.out" });
+    document.getElementById("full_name").focus();
+  });
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    showErrors({});
+    statusBox.className = "status";
+    setBusy(true);
+
+    const data = new FormData(form);
+    const body = {
+      submission_id: submissionId,
+      full_name: data.get("full_name"),
+      email: data.get("email"),
+      phone: data.get("phone"),
+      message: data.get("message"),
+      consent: document.getElementById("consent").checked,
+      website: data.get("website"),
+    };
+
+    try {
+      const res = await fetch(`${API_BASE}/intake/${encodeURIComponent(formId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (res.ok) {
+        form.reset();
+        updateCount();
+        submissionId = crypto.randomUUID();
+        showSuccess();
+      } else if (res.status === 400 && result.errors) {
+        const first = showErrors(result.errors);
+        showStatus("fail", result.errors.form ?? "Please check the highlighted fields.");
+        first?.focus();
+        shake();
+      } else {
+        showStatus("fail", result.error ?? "Something went wrong. Please try again.");
+        shake();
+      }
+    } catch {
+      showStatus("fail", "Could not reach the server. Please check your connection and try again.");
+      shake();
+    } finally {
+      setBusy(false);
+    }
+  });
+
+  function shake() {
+    if (gsap) gsap.to(card, { duration: .4, ease: "none", keyframes: { x: [0, -8, 7, -5, 3, 0] } });
+  }
+
+  // ---------- Motion (skipped when the libraries are missing or "reduce motion" is on) ----------
+
+  // Pointer light on the card.
+  if (finePointer) {
+    card.addEventListener("pointermove", (e) => {
+      const r = card.getBoundingClientRect();
+      card.style.setProperty("--mx", `${e.clientX - r.left}px`);
+      card.style.setProperty("--my", `${e.clientY - r.top}px`);
+    });
+    card.addEventListener("pointerenter", () => card.classList.add("lit"));
+    card.addEventListener("pointerleave", () => card.classList.remove("lit"));
+  }
+
+  if (gsap) {
+    // Split the headline into words for a masked reveal.
+    for (const line of document.querySelectorAll("[data-split]")) {
+      const words = line.textContent.trim().split(/\s+/);
+      line.setAttribute("aria-label", line.textContent.trim());
+      line.textContent = "";
+      words.forEach((word, i) => {
+        const outer = document.createElement("span");
+        outer.className = "w";
+        outer.setAttribute("aria-hidden", "true");
+        const inner = document.createElement("span");
+        inner.className = "wi";
+        inner.textContent = word;
+        outer.append(inner);
+        line.append(outer, i < words.length - 1 ? " " : "");
+      });
+    }
+
+    const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
+    tl.from(".panel", { opacity: 0, y: 24, scale: .98, duration: .8 })
+      .from(".eyebrow", { opacity: 0, y: 12, duration: .5 }, "-=.45")
+      .from(".wi", { yPercent: 110, opacity: 0, duration: .8, stagger: .05 }, "-=.35")
+      .from(".lead", { opacity: 0, y: 14, duration: .6 }, "-=.55")
+      .from(".points li", { opacity: 0, x: -14, duration: .55, stagger: .09 }, "-=.4")
+      .from("#card", { opacity: 0, y: 34, duration: .8 }, .25)
+      .from("#card [data-reveal], #card h2, #card .sub, #card .hint", { opacity: 0, y: 14, duration: .55, stagger: .05 }, .5);
+    document.documentElement.classList.remove("pre");
+    // If the browser can't animate (e.g. the tab opened in the background), show everything anyway.
+    setTimeout(() => tl.progress(1), 4000);
+
+    // Slowly drifting color blobs.
+    for (const blob of document.querySelectorAll(".blob")) {
+      gsap.to(blob, {
+        x: () => gsap.utils.random(-70, 70), y: () => gsap.utils.random(-60, 60),
+        scale: () => gsap.utils.random(.85, 1.2), duration: () => gsap.utils.random(6, 10),
+        ease: "sine.inOut", repeat: -1, repeatRefresh: true, yoyo: true,
+      });
+    }
+
+    // The send button leans slightly toward the pointer.
+    if (finePointer) {
+      const toX = gsap.quickTo(button, "x", { duration: .4, ease: "power3.out" });
+      const toY = gsap.quickTo(button, "y", { duration: .4, ease: "power3.out" });
+      button.addEventListener("pointermove", (e) => {
+        const r = button.getBoundingClientRect();
+        toX((e.clientX - r.left - r.width / 2) * .06);
+        toY((e.clientY - r.top - r.height / 2) * .25);
+      });
+      button.addEventListener("pointerleave", () => { toX(0); toY(0); });
+    }
+
+    // Smooth scrolling for mouse and trackpad (touch keeps native scrolling).
+    if (window.Lenis && finePointer) {
+      window.lenis = new window.Lenis({ lerp: .12 });
+      gsap.ticker.add((time) => window.lenis.raf(time * 1000));
+      gsap.ticker.lagSmoothing(0);
+    }
+  } else {
+    document.documentElement.classList.remove("pre");
+  }
+</script>
+</body>
+</html>

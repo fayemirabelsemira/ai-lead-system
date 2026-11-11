@@ -2,11 +2,12 @@ import { randomBytes, createHash } from "node:crypto";
 import { supabase } from "./supabase.js";
 import { sendMessage, editMessageText, answerCallbackQuery } from "./telegram.js";
 import { clip } from "./text.js";
+import { config } from "./config.js";
+import { buildCopyMessage } from "./copyMessage.js";
 
 // Button data looks like "ap:<32 hex characters>" (Telegram allows 64 bytes).
-const CALLBACK_PATTERN = /^(ap|rj|ed|vw):([0-9a-f]{32})$/;
+const CALLBACK_PATTERN = /^(ap|rj|ed|vw|sn):([0-9a-f]{32})$/;
 const MAX_EDIT_LENGTH = 2000;
-const DEV_NOTE = "(Dev mode: no email provider is connected yet, so nothing has actually been sent.)";
 
 // The raw token only ever lives inside the Telegram buttons.
 // The database stores only its SHA-256 hash.
@@ -18,18 +19,23 @@ function unwrap({ data, error }, what) {
   return data;
 }
 
-async function loadLeadContext(leadId) {
+async function loadLead(leadId) {
   const lead = unwrap(
     await supabase
       .from("leads")
       .select(
-        "id, business_id, full_name, phone, email, source, original_message, businesses ( business_name, telegram_chat_id )"
+        "id, business_id, full_name, phone, email, source, original_message, duplicate_review_status, businesses ( business_name, telegram_chat_id )"
       )
       .eq("id", leadId)
       .maybeSingle(),
     "Load lead"
   );
   if (!lead) throw new Error("Lead not found");
+  return lead;
+}
+
+async function loadLeadContext(leadId) {
+  const lead = await loadLead(leadId);
 
   const analysis = unwrap(
     await supabase
@@ -63,13 +69,40 @@ async function expiryFor(businessId) {
   return new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
 }
 
+// Who the customer is and how to reach them (shared by every kind of card).
+function contactLines(lead) {
+  return [
+    `Name: ${lead.full_name}`,
+    `Phone: ${lead.phone ?? "not provided"}`,
+    `Email: ${lead.email ?? "not provided"}`,
+    `Source: ${lead.source}`,
+    ...(lead.duplicate_review_status === "POSSIBLE"
+      ? ["⚠️ Possible repeat: this contact sent another inquiry recently."]
+      : []),
+  ];
+}
+
+function manualNoticeText(lead, reason) {
+  return [
+    "NEEDS HUMAN REVIEW",
+    "",
+    ...contactLines(lead),
+    "",
+    "Customer Message:",
+    `"${clip(lead.original_message, 800)}"`,
+    "",
+    "Why a human is needed:",
+    clip(reason, 1000),
+    "",
+    "No reply was drafted. Please contact the customer yourself.",
+  ].join("\n");
+}
+
 function cardText(lead, analysis, reply, version) {
   return [
     "NEW LEAD RECEIVED",
     "",
-    `Name: ${lead.full_name}`,
-    `Phone: ${lead.phone ?? "not provided"}`,
-    `Source: ${lead.source}`,
+    ...contactLines(lead),
     "",
     `Lead Score: ${analysis.lead_score}`,
     `Intent: ${analysis.intent}`,
@@ -84,7 +117,7 @@ function cardText(lead, analysis, reply, version) {
     "AI Reason:",
     // Clipped so the card always fits Telegram's 4096-character limit
     // (the reply itself is never clipped: the owner must see all of it).
-    analysis.score_reason ? clip(analysis.score_reason, 500) : "-",
+    analysis.score_reason ? clip(analysis.score_reason, 300) : "-",
   ].join("\n");
 }
 
@@ -113,21 +146,7 @@ export async function sendLeadCard(leadId) {
   if (analysis.needs_human_review || !analysis.suggested_reply) {
     await sendMessage(
       chatId,
-      [
-        "NEEDS HUMAN REVIEW",
-        "",
-        `Name: ${lead.full_name}`,
-        `Phone: ${lead.phone ?? "not provided"}`,
-        `Source: ${lead.source}`,
-        "",
-        "Customer Message:",
-        `"${clip(lead.original_message, 800)}"`,
-        "",
-        "Why a human is needed:",
-        analysis.escalation_reason ?? "The AI could not safely answer this.",
-        "",
-        "No reply was drafted. Please contact the customer yourself.",
-      ].join("\n")
+      manualNoticeText(lead, analysis.escalation_reason ?? "The AI could not safely answer this.")
     );
     return { escalated: true };
   }
@@ -167,6 +186,14 @@ export async function sendLeadCard(leadId) {
   return { escalated: false, approvalId: draft.approval_id };
 }
 
+// Tells the owner about a lead the system could not analyze (AI down, daily limit, ...).
+export async function sendManualNotice(leadId, reason) {
+  const lead = await loadLead(leadId);
+  const chatId = lead.businesses.telegram_chat_id;
+  if (!chatId) throw new Error("This business has no Telegram chat configured");
+  await sendMessage(chatId, manualNoticeText(lead, reason));
+}
+
 async function isAuthorized(businessId, telegramUserId, telegramChatId) {
   const userId = unwrap(
     await supabase.rpc("authorize_telegram_actor", {
@@ -183,11 +210,16 @@ function describeOutcome(result) {
   switch (result.result) {
     case "APPROVED":
       return result.delivery === "EMAIL_QUEUED"
-        ? { toast: "Approved.", status: `✅ APPROVED — queued for email delivery.\n${DEV_NOTE}` }
-        : {
+        ? {
             toast: "Approved.",
             status:
-              "✅ APPROVED — this lead has no email address, so nothing can be emailed. Please contact them yourself. The lead is marked as needing manual contact.",
+              config.gmailUser && config.gmailAppPassword
+                ? "✅ APPROVED — the email to the customer will be sent in a few seconds."
+                : "✅ APPROVED — queued for email, but Gmail is NOT set up on the server yet, so it will wait until it is.",
+          }
+        : {
+            toast: "Approved.",
+            status: "✅ APPROVED — copy the reply from the message below and send it to the customer yourself.",
           };
     case "REJECTED":
       return { toast: "Rejected.", status: "❌ REJECTED — nothing will be sent." };
@@ -206,11 +238,11 @@ function describeOutcome(result) {
   }
 }
 
-async function decide(cb, decision, tokenHash) {
+async function decide(cb, decision, token) {
   const chatId = cb.message.chat.id;
   const result = unwrap(
     await supabase.rpc("decide_approval", {
-      p_token_hash: tokenHash,
+      p_token_hash: hashToken(token),
       p_decision: decision,
       p_telegram_user_id: cb.from.id,
       p_telegram_chat_id: chatId,
@@ -233,6 +265,79 @@ async function decide(cb, decision, tokenHash) {
       console.error("Could not update the card:", err.message);
     }
   }
+
+  // Copy-and-send: give the owner the exact approved text, plus a button to
+  // record that it was sent. The button reuses this card's token.
+  if (result.result === "APPROVED" && result.delivery === "MANUAL" && result.content) {
+    const lead = await loadLead(result.lead_id);
+    const copy = buildCopyMessage(lead, result.content);
+    await sendMessage(chatId, copy.text, { entities: copy.entities, reply_markup: sentButton(token) });
+  }
+}
+
+const sentButton = (token) => ({
+  inline_keyboard: [[{ text: "✅ I sent it", callback_data: `sn:${token}` }]],
+});
+
+// Email worker notices -------------------------------------------------
+
+export async function notifyEmailSent({ leadId, recipient }) {
+  const lead = await loadLead(leadId);
+  const chatId = lead.businesses.telegram_chat_id;
+  if (!chatId) return;
+  await sendMessage(chatId, `📧 EMAIL SENT to ${lead.full_name} (${recipient}).`);
+}
+
+// The email failed (or may have failed): hand the reply back to the owner.
+export async function notifyEmailProblem({ result, lead_id: leadId, content, recipient, token, reason }) {
+  const lead = await loadLead(leadId);
+  const chatId = lead.businesses.telegram_chat_id;
+  if (!chatId) throw new Error("This business has no Telegram chat configured");
+  const options =
+    result === "NEEDS_CHECK"
+      ? {
+          title: "⚠️ NOT SURE THE EMAIL WENT OUT",
+          instruction: `Sending to ${recipient} was interrupted. Check your Gmail "Sent" folder first. Only if it is NOT there, copy the reply below and send it yourself.`,
+        }
+      : {
+          title: "⚠️ EMAIL COULD NOT BE SENT",
+          instruction: `Sending to ${recipient} failed (${clip(reason, 200)}). Copy the reply below and send it to the customer yourself.`,
+        };
+  const copy = buildCopyMessage(lead, content, options);
+  await sendMessage(chatId, copy.text, { entities: copy.entities, reply_markup: sentButton(token) });
+}
+
+const SENT_OUTCOMES = {
+  SENT: { toast: "Marked as sent." },
+  ALREADY_SENT: { toast: "This was already marked as sent." },
+  NOT_SENDABLE: { toast: "This reply cannot be marked as sent.", alert: true },
+  FORBIDDEN: { toast: "Not authorized.", alert: true },
+};
+
+async function markSent(cb, token) {
+  const chatId = cb.message.chat.id;
+  const result = unwrap(
+    await supabase.rpc("mark_message_sent", {
+      p_token_hash: hashToken(token),
+      p_telegram_user_id: cb.from.id,
+      p_telegram_chat_id: chatId,
+    }),
+    "Mark sent"
+  );
+  const outcome = SENT_OUTCOMES[result.result] ?? { toast: "This reply was not found." };
+  await answerCallbackQuery(cb.id, outcome.toast, Boolean(outcome.alert));
+
+  if (result.result === "SENT" || result.result === "ALREADY_SENT") {
+    try {
+      // Keep the original formatting (the copyable reply) and remove the button.
+      await editMessageText(chatId, cb.message.message_id, `${cb.message.text ?? ""}\n\n✅ SENT — recorded.`, {
+        entities: cb.message.entities ?? [],
+        ...NO_BUTTONS,
+      });
+    } catch (err) {
+      console.error("Could not update the sent message:", err.message);
+    }
+  }
 }
 
 export async function handleCallback(cb) {
@@ -248,8 +353,9 @@ export async function handleCallback(cb) {
 
   // Approve / Reject: the database function does ALL the checking and
   // changes everything in one transaction.
-  if (action === "ap") return decide(cb, "APPROVE", tokenHash);
-  if (action === "rj") return decide(cb, "REJECT", tokenHash);
+  if (action === "ap") return decide(cb, "APPROVE", token);
+  if (action === "rj") return decide(cb, "REJECT", token);
+  if (action === "sn") return markSent(cb, token);
 
   // Edit / View do not use up the approval, but still require authorization.
   const approval = unwrap(

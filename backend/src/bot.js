@@ -72,14 +72,6 @@ let offset = 0;
 let running = true;
 const controller = new AbortController();
 
-// SIGINT = Ctrl+C locally; SIGTERM = how hosting platforms and Docker stop a process.
-const stop = () => {
-  running = false;
-  controller.abort();
-};
-process.on("SIGINT", stop);
-process.on("SIGTERM", stop);
-
 async function handleUpdate(update) {
   try {
     if (update.message) await handleMessage(update.message);
@@ -96,7 +88,7 @@ async function handleUpdate(update) {
 }
 
 async function poll() {
-  console.log("Bot polling started. Press Ctrl+C to stop.");
+  console.log("Bot polling started.");
   while (running) {
     try {
       const updates = await getUpdates(offset, controller.signal);
@@ -113,4 +105,14 @@ async function poll() {
   console.log("Bot stopped.");
 }
 
-poll();
+// Started and stopped by index.js. Resolves once polling has fully stopped.
+export function startBot() {
+  const done = poll();
+  return {
+    stop() {
+      running = false;
+      controller.abort();
+      return done;
+    },
+  };
+}
