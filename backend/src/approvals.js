@@ -481,3 +481,17 @@ export async function handleEditReply(message) {
     console.error("Could not update the old card:", err.message);
   }
 }
+
+// Nobody approved in time: nothing was sent. Give the owner the text in case
+// they still want to reply by hand.
+export async function notifyApprovalExpired({ leadId, content }) {
+  const lead = await loadLead(leadId);
+  const chatId = lead.businesses.telegram_chat_id;
+  if (!chatId) return;
+  const copy = buildCopyMessage(lead, content, {
+    title: "⌛ APPROVAL EXPIRED",
+    instruction:
+      "Nobody approved this reply in time, so NOTHING was sent to the customer. If you still want to reply, copy it below and send it yourself.",
+  });
+  await sendMessage(chatId, copy.text, { entities: copy.entities });
+}

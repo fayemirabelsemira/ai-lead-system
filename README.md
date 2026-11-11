@@ -5,14 +5,15 @@ The AI analyzes and drafts replies. The business owner always approves before
 anything is sent to a customer.
 
 ## Status
-Working today: database schema (migrations 001-011), website-form intake API,
+Working today: database schema (migrations 001-012), website-form intake API,
 job worker (AI analysis -> Telegram card), Telegram approval bot
 (approve / edit / reject / view), copy-and-send delivery (the owner copies
 the approved reply, sends it by SMS/Viber/Messenger/email, taps "I sent it"),
 automatic email from the owner's Gmail (optional, per business; failures
 fall back to copy-and-send), customer form page at /f/<form id>,
-`add-business` onboarding script.
-Not built yet: approval-expiry sweep, follow-ups, Tally/generic webhooks,
+`add-business` onboarding script, crash recovery (stuck jobs and emails,
+undelivered cards, approval expiry).
+Not built yet: follow-ups, Tally/generic webhooks,
 dashboard, Resend (custom-domain email).
 
 ## Folder structure
@@ -26,8 +27,8 @@ dashboard, Resend (custom-domain email).
 ## Setup
 1. Copy .env.example to .env
 2. Fill in real values (never commit .env)
-3. Run every file in supabase/migrations/ in order (001 -> 011) in the
-   Supabase SQL Editor. 008-011 are safe to re-run.
+3. Run every file in supabase/migrations/ in order (001 -> 012) in the
+   Supabase SQL Editor. 008-012 are safe to re-run.
    On a production database, skip 006 (test data).
 
 ## Running the backend
@@ -57,6 +58,17 @@ dashboard, Resend (custom-domain email).
    moves to your business.
 4. To change the info later, edit business.json and run it again: the
    business is matched by its Telegram chat.
+
+## Crash recovery
+Every minute (and right after start) the backend checks for interrupted work:
+- a job stuck for 10+ minutes is retried; out of attempts, you get a
+  "NEEDS HUMAN REVIEW" message in Telegram
+- a card that never reached Telegram is cancelled and sent again
+- an approval nobody answered before it expired (business_settings
+  approval_expiry_hours, default 24) is closed; you get the unsent text
+- an email interrupted while sending is NEVER resent automatically (it may
+  have gone out): you are asked to check Gmail "Sent" and get an
+  "I sent it" button
 
 `npm run dev` prints every form link. Open it, send an inquiry, and it arrives
 in Telegram as a card. The form page shows a "Development server" note

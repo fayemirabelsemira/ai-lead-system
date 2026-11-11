@@ -120,3 +120,21 @@ export async function completeOutbox(
     "Complete outbox"
   );
 }
+
+// ---------- recovery (see recovery.js and migration 012) ----------
+
+export async function recoverStuckJobs(staleMinutes) {
+  return unwrap(await supabase.rpc("recover_stuck_jobs", { p_stale_minutes: staleMinutes }), "Recover jobs") ?? [];
+}
+
+export async function resendUndeliveredCards(staleMinutes) {
+  return unwrap(await supabase.rpc("resend_undelivered_cards", { p_stale_minutes: staleMinutes }), "Resend cards") ?? [];
+}
+
+export async function expireApprovals(limit = 20) {
+  return unwrap(await supabase.rpc("expire_approvals", { p_limit: limit }), "Expire approvals") ?? [];
+}
+
+export async function staleOutbox(staleMinutes) {
+  return unwrap(await supabase.rpc("stale_outbox", { p_stale_minutes: staleMinutes }), "Find stuck emails") ?? [];
+}

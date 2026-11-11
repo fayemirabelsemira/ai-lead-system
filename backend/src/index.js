@@ -13,10 +13,12 @@ import {
   sendManualNotice,
   notifyEmailSent,
   notifyEmailProblem,
+  notifyApprovalExpired,
   newToken,
   hashToken,
 } from "./approvals.js";
 import { createOutboxWorker } from "./outbox.js";
+import { createRecovery } from "./recovery.js";
 import { createGmailSender } from "./email/gmail.js";
 import * as jobsDb from "./jobs-db.js";
 import { supabase } from "./supabase.js";
@@ -58,8 +60,18 @@ const outbox =
       })
     : null;
 
+const recovery = createRecovery({
+  ...jobsDb,
+  newToken,
+  hashToken,
+  sendManualNotice,
+  notifyEmailProblem,
+  notifyApprovalExpired,
+});
+
 const bot = startBot();
 worker.start();
+recovery.start();
 if (outbox) outbox.start();
 else console.log("Automatic email is OFF (GMAIL_USER / GMAIL_APP_PASSWORD not set). Approved replies use copy-and-send.");
 server.listen(config.port, async () => {
@@ -86,7 +98,7 @@ async function shutdown(signal) {
   stopping = true;
   console.log(`${signal} received, shutting down...`);
   server.close();
-  await Promise.allSettled([bot.stop(), worker.stop(), outbox?.stop()]);
+  await Promise.allSettled([bot.stop(), worker.stop(), outbox?.stop(), recovery.stop()]);
   console.log("Stopped.");
   process.exit(0);
 }
